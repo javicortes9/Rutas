@@ -1,7 +1,7 @@
 {
   "name": "Vereda · rutas con intención",
   "short_name": "Vereda",
-  "description": "Rutas que pasan por lo que quieres ver: naturaleza, miradores, patrimonio, bares, agua y arte.",
+  "description": "App de Javier Cortés López. Rutas que pasan por lo que quieres ver: naturaleza, miradores, patrimonio, bares, agua y arte.",
   "lang": "es",
   "start_url": "./",
   "scope": "./",

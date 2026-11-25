@@ -193,3 +193,14 @@ input[type=range]{width:100%;accent-color:var(--acc);height:32px}
 .fold svg{transition:transform .25s}
 .sheet.collapsed .fold svg{transform:rotate(180deg)}
 @media (min-width:900px){.fold{display:none}}
+
+/* Firma del autor */
+.brand{display:flex;align-items:center;gap:12px;padding:4px 0 14px;margin-bottom:12px;border-bottom:1px solid var(--line)}
+.brand .logo{width:44px;height:44px;flex:none;stroke:none}
+.bname{margin:0;font-size:22px;font-weight:800;line-height:1.1;letter-spacing:-.01em}
+.bsub{margin:2px 0 0;font-size:13px;color:var(--mute)}
+.bsub b{color:var(--ink);font-weight:700;white-space:nowrap}
+.sign{margin:14px 0 0;padding-top:12px;border-top:1px solid var(--line);font-size:13px;color:var(--mute);text-align:center}
+.sign b{color:var(--ink);white-space:nowrap}
+.sign span{font-size:12px}
+@media print{.catfoot b{color:#000}}

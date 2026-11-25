@@ -1,5 +1,7 @@
 # Vereda · rutas con intención
 
+Aplicación diseñada y elaborada por **Javier Cortés López** (Grado en Geografía y Gestión del Territorio, Universidad de Sevilla).
+
 Web app instalable (PWA) tipo mapa: calcula una ruta de A a B que se desvía para pasar por lo que quieres ver
 (naturaleza, miradores y paisaje, patrimonio, bares y tapas, agua, arte y cultura) y genera un catálogo con fotos.
 

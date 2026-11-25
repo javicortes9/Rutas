@@ -216,7 +216,7 @@ const layersCtl = {
 };
 L.control.layers(layersCtl, null, { position: 'topright' }).addTo(map);
 L.control.zoom({ position: 'topright' }).addTo(map);
-map.attributionControl.setPrefix('');
+map.attributionControl.setPrefix('Vereda · J. Cortés López');
 const routeLayer = L.layerGroup().addTo(map);
 const poiLayer = L.layerGroup().addTo(map);
 let baseLineLayer = null;
@@ -538,7 +538,7 @@ function gmapsUrl() {
 }
 function downloadGpx() {
   const r = state.result, name = `Vereda · ${state.from.label} → ${state.to.label}`;
-  const gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Vereda" xmlns="http://www.topografix.com/GPX/1/1"><metadata><name>${esc(name)}</name></metadata>` +
+  const gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Vereda (Javier Cortés López)" xmlns="http://www.topografix.com/GPX/1/1"><metadata><name>${esc(name)}</name><author><name>Javier Cortés López</name></author></metadata>` +
     r.items.map(p => `<wpt lat="${p.lat.toFixed(6)}" lon="${p.lon.toFixed(6)}"><name>${esc(p.name)}</name><type>${esc(p.kind)}</type></wpt>`).join('') +
     `<trk><name>${esc(name)}</name><trkseg>${r.route.coords.map(c => `<trkpt lat="${c[0].toFixed(6)}" lon="${c[1].toFixed(6)}"/>`).join('')}</trkseg></trk></gpx>`;
   const a = document.createElement('a');
