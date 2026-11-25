@@ -689,6 +689,53 @@ $('#grid').addEventListener('click', e => {
 });
 addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#catalog').hidden) closeCatalog(); });
 
+/* ---------- Introducción y nombre ---------- */
+const intro = $('#intro'), slidesEl = $('#slides');
+const nSlides = slidesEl.children.length;
+$('#bubbles').innerHTML = Object.entries(THEMES).map(([k, t]) => `<div class="bub" style="--c:${t.color}"><i>${svgI(k)}</i>${esc(t.label)}</div>`).join('');
+$('#introCards').innerHTML = [['naturaleza', 'Parque natural', 'Naturaleza'], ['patrimonio', 'Castillo', 'Patrimonio'], ['miradores', 'Mirador del valle', 'Mirador']]
+  .map(([k, n, l]) => `<div class="icard" style="--c:${THEMES[k].color}"><div class="ph">${svgI(k)}</div><div class="bd"><small>${l}</small><b>${n}</b></div></div>`).join('');
+$('#dots').innerHTML = [...Array(nSlides)].map((_, i) => `<button type="button" role="tab" aria-label="Pantalla ${i + 1}" data-i="${i}"></button>`).join('');
+let slideIdx = 0;
+function goSlide(i) { slidesEl.children[i]?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', inline: 'center', block: 'nearest' }); }
+function markSlide() {
+  const i = Math.round(slidesEl.scrollLeft / Math.max(1, slidesEl.clientWidth));
+  if (i === slideIdx && slidesEl.children[i].classList.contains('on')) return;
+  slideIdx = i;
+  [...slidesEl.children].forEach((s, k) => s.classList.toggle('on', k === i));
+  [...$('#dots').children].forEach((d, k) => d.setAttribute('aria-selected', k === i));
+  $('#introNext').hidden = i === nSlides - 1;
+  $('#introSkip').style.visibility = i === nSlides - 1 ? 'hidden' : 'visible';
+}
+let scrollT;
+slidesEl.addEventListener('scroll', () => { clearTimeout(scrollT); scrollT = setTimeout(markSlide, 60); }, { passive: true });
+$('#dots').addEventListener('click', e => { const b = e.target.closest('button'); if (b) goSlide(+b.dataset.i); });
+$('#introNext').addEventListener('click', () => goSlide(Math.min(slideIdx + 1, nSlides - 1)));
+$('#introSkip').addEventListener('click', () => goSlide(nSlides - 1));
+intro.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'ArrowRight') goSlide(Math.min(slideIdx + 1, nSlides - 1));
+  if (e.key === 'ArrowLeft') goSlide(Math.max(slideIdx - 1, 0));
+});
+function openIntro(at = 0) {
+  intro.hidden = false; document.body.classList.add('intro-open');
+  $('#nameIn').value = store.get('name', '') || '';
+  requestAnimationFrame(() => { slidesEl.scrollTo({ left: at * slidesEl.clientWidth, behavior: 'auto' }); slideIdx = -1; markSlide(); (at === nSlides - 1 ? $('#nameIn') : $('#introNext')).focus({ preventScroll: true }); });
+}
+function closeIntro() { intro.hidden = true; document.body.classList.remove('intro-open'); store.set('introSeen', true); greet(); }
+function greet() {
+  const n = (store.get('name', '') || '').trim();
+  $('#ask').textContent = n ? `Hola, ${n}. ¿Qué quieres ver por el camino?` : '¿Qué quieres ver por el camino?';
+  $('#catEyebrow').textContent = (n ? `Lo que vas a ver, ${n}` : 'Lo que vas a ver') + ' · Vereda, de Javier Cortés López';
+}
+$('#nameForm').addEventListener('submit', e => { e.preventDefault(); store.set('name', $('#nameIn').value.trim().slice(0, 30)); closeIntro(); if (store.get('name', '')) toast(`¡Encantados, ${store.get('name', '')}!`); });
+$('#noName').addEventListener('click', () => { store.set('name', ''); closeIntro(); });
+$('#logoBtn').addEventListener('click', () => openIntro(0));
+$('#reIntro').addEventListener('click', () => openIntro(0));
+$('#reName').addEventListener('click', () => openIntro(nSlides - 1));
+greet();
+if (!store.get('introSeen', false)) openIntro(0);
+
 /* ---------- PWA ---------- */
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 }

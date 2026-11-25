@@ -21,6 +21,42 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="vlogo" viewBox="0 0 120 120">
+  <defs>
+    <linearGradient id="vSky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffd27a"/>
+      <stop offset=".55" stop-color="#f4884f"/>
+      <stop offset="1" stop-color="#e0605a"/>
+    </linearGradient>
+    <linearGradient id="vFar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a9c8a"/><stop offset="1" stop-color="#2f7a6b"/>
+    </linearGradient>
+    <linearGradient id="vNear" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1d5a4c"/><stop offset="1" stop-color="#0f3d34"/>
+    </linearGradient>
+    <radialGradient id="vSun" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#fffbe6"/><stop offset=".6" stop-color="#fff1b8"/><stop offset="1" stop-color="#ffe08a" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="vClip"><rect width="120" height="120" rx="28"/></clipPath>
+  </defs>
+  <g clip-path="url(#vClip)">
+    <rect width="120" height="120" fill="url(#vSky)"/>
+    <circle cx="82" cy="40" r="22" fill="url(#vSun)"/>
+    <circle cx="82" cy="40" r="11" fill="#fff6d0"/>
+    <path d="M0 70 L22 50 L36 60 L56 38 L78 62 L94 50 L120 68 V120 H0Z" fill="#7d4f8f" opacity=".55"/>
+    <path d="M0 78 L18 66 L40 76 L62 58 L86 76 L104 66 L120 74 V120 H0Z" fill="url(#vFar)"/>
+    <path d="M0 92 C20 82 40 86 60 80 C82 74 100 82 120 78 V120 H0Z" fill="url(#vNear)"/>
+    <path d="M44 120 C46 108 72 104 68 94 C64 86 52 86 58 78" fill="none" stroke="#fff" stroke-width="11" stroke-linecap="round"/>
+    <path d="M44 120 C46 108 72 104 68 94 C64 86 52 86 58 78" fill="none" stroke="#1d5a4c" stroke-width="1.8" stroke-dasharray="4 5" stroke-linecap="round"/>
+    <circle cx="24" cy="98" r="5" fill="#3fb8a8" stroke="#fff" stroke-width="2"/>
+    <circle cx="98" cy="96" r="5" fill="#d9791a" stroke="#fff" stroke-width="2"/>
+    <g transform="translate(58 30)">
+      <ellipse cx="0" cy="44" rx="7" ry="2.4" fill="#0f3d34" opacity=".35"/>
+      <path d="M0 44 C-4 34 -16 26 -16 14 A16 16 0 0 1 16 14 C16 26 4 34 0 44Z" fill="#c2365a" stroke="#fff" stroke-width="3" stroke-linejoin="round"/>
+      <circle cx="0" cy="14" r="6.5" fill="#fff"/>
+    </g>
+  </g>
+</symbol></svg>
 <div id="map" aria-label="Mapa"></div>
 
 <header class="search">
@@ -42,11 +78,11 @@
   <div id="result" class="result" hidden></div>
   <div class="planner">
     <div class="brand">
-      <svg class="logo" viewBox="0 0 48 48" aria-hidden="true"><rect width="48" height="48" rx="12" fill="#0f3d34"/><path d="M0 36l12-9 9 6 11-10 16 11v14H0z" fill="#1a6152"/><path d="M24 42c-8-4 8-10 0-15s6-10 2-17" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/><circle cx="26" cy="10" r="4" fill="#3fb8a8" stroke="#fff" stroke-width="2"/><circle cx="22" cy="27" r="4" fill="#c2365a" stroke="#fff" stroke-width="2"/></svg>
+      <button type="button" class="logobtn" id="logoBtn" aria-label="Ver la introducción"><svg class="logo" aria-hidden="true"><use href="#vlogo"/></svg></button>
       <div><p class="bname">Vereda</p><p class="bsub">Rutas con intención · creada por <b>Javier Cortés López</b></p></div>
     </div>
     <div class="seg" id="mode" role="group" aria-label="Medio de transporte"></div>
-    <h2>¿Qué quieres ver por el camino?</h2>
+    <h2 id="ask">¿Qué quieres ver por el camino?</h2>
     <div class="chips" id="themes"></div>
     <p class="hint" id="hint"></p>
     <label class="slider"><span>Desvío máximo respecto a la ruta normal <output id="detourOut"></output></span>
@@ -55,20 +91,69 @@
     <button type="button" id="go" class="primary go">Trazar ruta</button>
     <p id="status" class="status" role="status" aria-live="polite"></p>
     <p class="foot">Toca el mapa para fijar origen o destino.</p>
-    <p class="sign">Vereda · aplicación diseñada y elaborada por <b>Javier Cortés López</b> · © 2026<br><span>Datos: OpenStreetMap, Wikidata, Wikipedia y Wikimedia Commons</span></p>
+    <p class="sign">Vereda · aplicación diseñada y elaborada por <b>Javier Cortés López</b> · © 2026<br><span>Datos: OpenStreetMap, Wikidata, Wikipedia y Wikimedia Commons</span><br><button type="button" class="lk2" id="reIntro">Ver la introducción</button> · <button type="button" class="lk2" id="reName">Cambiar mi nombre</button></p>
   </div>
 </section>
 
 <section id="catalog" class="catalog" hidden aria-label="Catálogo de la ruta">
   <header class="cathead">
     <button type="button" id="catClose" class="back" aria-label="Volver al mapa"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><span>Mapa</span></button>
-    <div class="ct"><p class="eyebrow">Lo que vas a ver · Vereda, de Javier Cortés López</p><h1 id="catTitle"></h1><p id="catSub" class="sub"></p></div>
+    <div class="ct"><p class="eyebrow" id="catEyebrow">Lo que vas a ver · Vereda, de Javier Cortés López</p><h1 id="catTitle"></h1><p id="catSub" class="sub"></p></div>
     <button type="button" id="catPrint" class="btn">Imprimir o PDF</button>
   </header>
   <div id="catFilters" class="filters" role="group" aria-label="Filtrar"></div>
   <div id="grid" class="grid"></div>
   <p class="catfoot"><b>Catálogo generado con Vereda, aplicación elaborada por Javier Cortés López.</b> Fotos y textos de Wikimedia Commons y Wikipedia con sus licencias; lugares de OpenStreetMap (ODbL). «Foto del entorno» indica una imagen tomada cerca del lugar, no necesariamente del propio sitio.</p>
 </section>
+
+
+<div id="intro" class="intro" hidden role="dialog" aria-modal="true" aria-label="Bienvenida a Vereda">
+  <div class="slides" id="slides">
+    <section class="slide" style="--c:#f4884f">
+      <div class="art"><svg class="biglogo" aria-hidden="true"><use href="#vlogo"/></svg></div>
+      <div class="txt"><p class="kick">Te damos la bienvenida a</p><h1 class="wordmark">Vereda</h1>
+        <p>El camino también cuenta. Vereda dibuja tu ruta de un sitio a otro pasando por lo que de verdad quieres ver.</p>
+        <p class="by">Una app de <b>Javier Cortés López</b></p></div>
+    </section>
+    <section class="slide" style="--c:#2f8f4e">
+      <div class="art"><div class="bubbles" id="bubbles"></div></div>
+      <div class="txt"><p class="kick">1 · Elige</p><h2>¿Qué te apetece ver?</h2>
+        <p>Naturaleza, miradores, patrimonio, bares y tapas, agua o arte. Puedes combinar varios.</p></div>
+    </section>
+    <section class="slide" style="--c:#d9791a">
+      <div class="art"><svg class="routeart" viewBox="0 0 300 240" aria-hidden="true">
+        <g class="grid"><path d="M0 0V240"/><path d="M30 0V240"/><path d="M60 0V240"/><path d="M90 0V240"/><path d="M120 0V240"/><path d="M150 0V240"/><path d="M180 0V240"/><path d="M210 0V240"/><path d="M240 0V240"/><path d="M270 0V240"/><path d="M300 0V240"/><path d="M0 0H300"/><path d="M0 30H300"/><path d="M0 60H300"/><path d="M0 90H300"/><path d="M0 120H300"/><path d="M0 150H300"/><path d="M0 180H300"/><path d="M0 210H300"/><path d="M0 240H300"/></g>
+        <path class="normal" d="M46 206 L254 40"/>
+        <path class="themed" pathLength="100" d="M46 206 C40 160 70 140 78 128 C90 110 130 180 156 168 C186 154 170 96 204 84 C232 74 236 52 254 40"/>
+        <g class="p p1"><circle cx="78" cy="128" r="11" fill="#2f8f4e"/></g>
+        <g class="p p2"><circle cx="156" cy="168" r="11" fill="#9b4a2c"/></g>
+        <g class="p p3"><circle cx="204" cy="84" r="11" fill="#d9791a"/></g>
+        <g class="ab"><circle cx="46" cy="206" r="14" fill="#0f3d34"/><text x="46" y="211">A</text></g>
+        <g class="ab"><circle cx="254" cy="40" r="14" fill="#c2365a"/><text x="254" y="45">B</text></g>
+      </svg></div>
+      <div class="txt"><p class="kick">2 · Traza</p><h2>Tu ruta, con intención</h2>
+        <p>Calculamos la ruta normal y la desviamos lo justo para pasar por más sitios. Tú decides cuánto desvío aceptas.</p></div>
+    </section>
+    <section class="slide" style="--c:#6a4bb0">
+      <div class="art"><div class="cards" id="introCards"></div></div>
+      <div class="txt"><p class="kick">3 · Descubre</p><h2>Un catálogo con fotos</h2>
+        <p>Antes de salir, mira en fichas con fotos todo lo que vas a encontrar, en orden. Llévalo a Google Maps o guárdalo en PDF.</p></div>
+    </section>
+    <section class="slide" style="--c:#c2365a">
+      <div class="art"><svg class="biglogo small" aria-hidden="true"><use href="#vlogo"/></svg></div>
+      <div class="txt"><h2>¿Cómo te llamas?</h2><p>Así Vereda te saludará por tu nombre.</p>
+        <form id="nameForm" class="nameform" autocomplete="on"><label class="sr" for="nameIn">Tu nombre</label>
+          <input id="nameIn" type="text" maxlength="30" placeholder="Tu nombre" autocomplete="given-name" enterkeyhint="go">
+          <button type="submit" class="primary">Empezar</button></form>
+        <button type="button" class="ghost" id="noName">Prefiero no decirlo</button></div>
+    </section>
+  </div>
+  <div class="introbar">
+    <button type="button" class="ghost" id="introSkip">Saltar</button>
+    <div class="dots" id="dots" role="tablist" aria-label="Pantallas de la introducción"></div>
+    <button type="button" class="next" id="introNext">Siguiente</button>
+  </div>
+</div>
 
 <div id="toast" class="toast" role="status"></div>
 
