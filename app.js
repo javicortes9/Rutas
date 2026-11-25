@@ -128,17 +128,66 @@ async function osrm(M, pts) {
   const r = j.routes[0];
   return { distance: r.distance, duration: r.duration, coords: r.geometry.coordinates.map(([x, y]) => [y, x]) };
 }
-const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
+const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Consulta todos los servidores a la vez (con un reintento cada uno) y se queda con el primero que conteste bien
 async function overpass(q) {
-  let last;
-  for (const ep of OVERPASS) {
-    try {
-      const j = await getJSON(ep, 95000, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
-      if (!j.elements?.length && j.remark && /error|timed out|out of memory/i.test(j.remark)) throw new Error(j.remark);
-      return j;
-    } catch (e) { last = e; }
+  const ac = new AbortController();
+  const one = async ep => {
+    let last;
+    for (let a = 0; a < 2; a++) {
+      try {
+        const r = await fetch(ep, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: ac.signal });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const j = await r.json();
+        if (!Array.isArray(j.elements)) throw new Error('respuesta vacía');
+        if (!j.elements.length && j.remark && /error|timed out|out of memory/i.test(j.remark)) throw new Error(j.remark);
+        return j;
+      } catch (e) { if (e.name === 'AbortError') throw e; last = e; await sleep(3000); }
+    }
+    throw last;
+  };
+  const tm = setTimeout(() => ac.abort(), 120000);
+  try { const j = await Promise.any(OVERPASS.map(one)); ac.abort(); return j; }
+  catch { throw new Error('OpenStreetMap (Overpass) no responde ahora mismo'); }
+  finally { clearTimeout(tm); }
+}
+
+/* Wikidata: segunda fuente, rápida y con fotos. [peso, etiqueta, esÁrea] por clase */
+const WD = {
+  naturaleza: { Q46169: [6, 'Parque nacional', 1], Q179049: [5, 'Reserva natural', 1], Q473972: [5, 'Espacio protegido', 1], Q22698: [3, 'Parque', 0], Q1107656: [2, 'Jardín', 0], Q4421: [3, 'Bosque', 1], Q170321: [3, 'Humedal', 1], Q35509: [3, 'Cueva', 0] },
+  miradores: { Q6017969: [6, 'Mirador', 0], Q133056: [4, 'Puerto de montaña', 0], Q150784: [4, 'Cañón', 0], Q8502: [3, 'Montaña', 0], Q54050: [2, 'Cerro', 0] },
+  patrimonio: { Q23413: [6, 'Castillo', 0], Q839954: [5, 'Yacimiento', 0], Q44613: [5, 'Monasterio', 0], Q474: [5, 'Acueducto', 0], Q2977: [5, 'Catedral', 0], Q16560: [4, 'Palacio', 0], Q57821: [4, 'Fortificación', 0], Q82117: [4, 'Puerta histórica', 0], Q16748868: [4, 'Muralla', 0], Q109607: [3, 'Ruinas', 0], Q16970: [3, 'Iglesia', 0], Q4989906: [3, 'Monumento', 0], Q12518: [3, 'Torre', 0], Q12280: [2, 'Puente', 0] },
+  agua: { Q34038: [6, 'Cascada', 0], Q40080: [5, 'Playa', 0], Q131681: [4, 'Embalse', 1], Q23397: [4, 'Lago', 1], Q124714: [3, 'Manantial', 0], Q483453: [2, 'Fuente', 0], Q12323: [3, 'Presa', 0] },
+  arte: { Q33506: [5, 'Museo', 0], Q1007870: [4, 'Galería de arte', 0], Q24354: [3, 'Teatro', 0], Q219423: [3, 'Mural', 0], Q179700: [2, 'Estatua', 0] },
+};
+async function wikidataPois(themeIds, bb) {
+  const ids = themeIds.filter(t => WD[t]);
+  if (!ids.length) return [];
+  const map = {};
+  for (const t of ids) for (const [q, v] of Object.entries(WD[t])) if (!map[q] || map[q][0] < v[0]) map[q] = [...v, t];
+  const her = ids.includes('patrimonio') ? `UNION { ?item wdt:P1435 ?her . }` : '';
+  const sp = `SELECT ?item ?itemLabel ?coord ?img ?cls ?article WHERE {
+ SERVICE wikibase:box { ?item wdt:P625 ?coord . bd:serviceParam wikibase:cornerSouthWest "Point(${bb.w} ${bb.s})"^^geo:wktLiteral . bd:serviceParam wikibase:cornerNorthEast "Point(${bb.e} ${bb.n})"^^geo:wktLiteral . }
+ { ?item wdt:P31 ?cls . VALUES ?cls { ${Object.keys(map).map(q => 'wd:' + q).join(' ')} } } ${her}
+ OPTIONAL { ?item wdt:P18 ?img }
+ OPTIONAL { ?article schema:about ?item ; schema:isPartOf <https://es.wikipedia.org/> . }
+ SERVICE wikibase:label { bd:serviceParam wikibase:language "es,en". }
+} LIMIT 4000`;
+  const j = await getJSON('https://query.wikidata.org/sparql?format=json&query=' + encodeURIComponent(sp), 60000, { headers: { Accept: 'application/sparql-results+json' } });
+  const out = new Map();
+  for (const b of j.results?.bindings || []) {
+    const q = b.item.value.split('/').pop(), name = b.itemLabel?.value || '';
+    if (/^Q\d+$/.test(name)) continue;
+    const m = (b.coord?.value || '').match(/Point\(([-\d.eE]+) ([-\d.eE]+)\)/); if (!m) continue;
+    const cls = b.cls ? b.cls.value.split('/').pop() : null;
+    const def = cls && map[cls] ? map[cls] : [3, 'Bien patrimonial', 0, 'patrimonio'];
+    const prev = out.get(q);
+    if (prev && prev.w >= def[0]) { if (!prev.img && b.img) prev.img = b.img.value; continue; }
+    out.set(q, { q, name, lat: +m[2], lon: +m[1], w: def[0], kind: def[1], area: def[2], theme: def[3], img: b.img?.value || prev?.img || null,
+      wiki: b.article ? decodeURIComponent(b.article.value.split('/wiki/')[1] || '').replace(/_/g, ' ') : null });
   }
-  throw new Error('el servicio de lugares (Overpass) no responde: ' + (last?.message || ''));
+  return [...out.values()];
 }
 const nomi = 'https://nominatim.openstreetmap.org';
 const shortName = r => {
@@ -358,12 +407,37 @@ async function run() {
     const base = await osrm(M, [state.from, state.to]);
     const L0 = G.mkLine(base.coords);
     const R = Math.round(G.clamp(base.distance * detour * 0.35, M.rMin, M.rMax));
-    status(`Buscando ${themeIds.map(t => THEMES[t].label.toLowerCase()).join(', ')} en un pasillo de ${fmtKm(R)}…`);
+    const rOf = id => Math.round(Math.max(M.rMin * 0.6, R * (THEMES[id].rMul || 1)));
+    const rMaxQ = Math.max(...themeIds.map(rOf));
+    const lats = base.coords.map(c => c[0]), lons = base.coords.map(c => c[1]);
+    const padLat = rMaxQ / 110540, padLon = rMaxQ / (111320 * Math.cos(lats[0] * Math.PI / 180));
+    const bb = { s: Math.min(...lats) - padLat, n: Math.max(...lats) + padLat, w: Math.min(...lons) - padLon, e: Math.max(...lons) + padLon };
     const poly = G.simplifyTo(L0, 90).map(c => c[0].toFixed(5) + ',' + c[1].toFixed(5)).join(',');
-    const stmts = themeIds.flatMap(id => THEMES[id].rules.map(r => `${r.q}(around:${Math.round(Math.max(M.rMin * 0.6, R * (THEMES[id].rMul || 1)))},${poly});`));
-    const q = `[out:json][timeout:90];(${stmts.join('')})->.a;node.a;out body;(way.a;relation.a;);out tags bb;`;
-    const data = await overpass(q);
-    const pois = buildPois(data.elements || [], themeIds, L0, M);
+    const groups = new Map();
+    for (const id of themeIds) { const r = rOf(id); groups.set(r, [...(groups.get(r) || []), ...THEMES[id].rules.map(x => x.q + ';')]); }
+    const gs = [...groups.entries()];
+    const q = `[out:json][timeout:100][bbox:${bb.s.toFixed(5)},${bb.w.toFixed(5)},${bb.n.toFixed(5)},${bb.e.toFixed(5)}];` +
+      gs.map(([r, qs], i) => `(${qs.join('')})->.c${i};nwr.c${i}(around:${r},${poly})->.a${i};`).join('') +
+      `(${gs.map((_, i) => `.a${i};`).join('')})->.a;node.a;out body;(way.a;relation.a;);out tags bb;`;
+    status('Buscando lugares en OpenStreetMap y Wikidata… (si el servidor está saturado puede tardar hasta un minuto)');
+    const tq = Date.now(), tick = setInterval(() => status(`Buscando lugares en OpenStreetMap y Wikidata… ${Math.round((Date.now() - tq) / 1000)} s (el servidor de OpenStreetMap va lento hoy; puede tardar hasta un minuto)`), 1000);
+    let osmR, wdR;
+    try { [osmR, wdR] = await Promise.allSettled([overpass(q), wikidataPois(themeIds, bb)]); } finally { clearInterval(tick); }
+    if (osmR.status === 'rejected' && (wdR.status === 'rejected' || !wdR.value.length))
+      throw new Error((osmR.reason?.message || 'sin respuesta') + '. Vuelve a intentarlo en un rato.');
+    const pois = osmR.status === 'fulfilled' ? buildPois(osmR.value.elements || [], themeIds, L0, M) : [];
+    if (wdR.status === 'fulfilled') {
+      const have = new Set(pois.map(p => p.tags.wikidata).filter(Boolean));
+      for (const w of wdR.value) {
+        if (have.has(w.q)) continue;
+        const [x, y] = L0.xy(w.lat, w.lon), pr = G.project(L0, x, y);
+        if (pr.off > rOf(w.theme) * (w.area ? 1.5 : 1)) continue;
+        const fname = w.img ? decodeURIComponent(w.img.split('/').pop()) : null;
+        pois.push({ id: 'w' + w.q, osm: null, wd: w.q, lat: w.lat, lon: w.lon, x, y, diag: w.area ? M.rMax : 0, tags: { name: w.name, wikidata: w.q, ...(w.wiki ? { wikipedia: 'es:' + w.wiki } : {}) },
+          name: w.name, kind: w.kind, theme: w.theme, score: w.w + 2 + (w.img ? 1 : 0), off: pr.off, t: pr.t, wp: !w.area, photo: fname });
+      }
+    }
+    if (osmR.status === 'rejected') toast('OpenStreetMap no ha respondido: uso solo lugares de Wikidata (sin bares ni sitios pequeños).');
     status(`${pois.length} lugares cerca del trayecto. Ajustando el desvío…`);
     const best = await optimize(M, base, pois, detour, R);
     const items = collect(pois, best.route.coords, M, best.picks);
@@ -474,6 +548,7 @@ async function enrich(p) {
     if (m) { info.img = filePath(decodeURIComponent(m[1])); info.credit = { page: filePage(decodeURIComponent(m[1])), txt: 'Wikimedia Commons' }; }
     else if (/\.(jpe?g|png|webp)(\?|$)/i.test(t.image)) { info.img = t.image; info.credit = { page: t.image, txt: 'Fuente original' }; }
   }
+  if (!info.img && p.photo) { info.img = filePath(p.photo); info.credit = { page: filePage(p.photo), txt: 'Wikimedia Commons' }; }
   if (!info.img && /^File:/i.test(t.wikimedia_commons || '')) { info.img = filePath(t.wikimedia_commons); info.credit = { page: filePage(t.wikimedia_commons), txt: 'Wikimedia Commons' }; }
   if (t.wikidata) {
     const wd = (await state.result.wd)?.get(t.wikidata);
@@ -516,7 +591,7 @@ function cardHtml(p, i) {
       <p class="meta"><span class="tag">${esc(p.kind)}</span> km ${nf1.format(p.t1 / 1000)}${p.stop ? ' · parada' : p.env ? ' · en el entorno' : ''}</p>
       <h3>${esc(p.name)}</h3>
       <p class="desc">${p.tags.description ? esc(p.tags.description) : ''}</p>
-      <p class="links"><button type="button" class="lk" data-fly="${esc(p.id)}">Ver en el mapa</button><a href="${esc(gm)}" target="_blank" rel="noopener">Google Maps</a><a href="https://www.openstreetmap.org/${esc(p.osm)}" target="_blank" rel="noopener">OSM</a><span class="wl"></span></p>
+      <p class="links"><button type="button" class="lk" data-fly="${esc(p.id)}">Ver en el mapa</button><a href="${esc(gm)}" target="_blank" rel="noopener">Google Maps</a>${p.osm ? `<a href="https://www.openstreetmap.org/${esc(p.osm)}" target="_blank" rel="noopener">OSM</a>` : `<a href="https://www.wikidata.org/wiki/${esc(p.wd)}" target="_blank" rel="noopener">Wikidata</a>`}<span class="wl"></span></p>
       <p class="credit"></p>
     </div></article>`;
 }
