@@ -198,15 +198,21 @@ const shortName = r => {
 };
 
 /* ---------- Mapa ---------- */
-const dark = matchMedia('(prefers-color-scheme: dark)');
-const cartoUrl = () => `https://{s}.basemaps.cartocdn.com/${dark.matches ? 'dark_all' : 'rastertiles/voyager'}/{z}/{x}/{y}{r}.png`;
 const map = L.map('map', { zoomControl: false, attributionControl: true }).setView([37.389, -5.993], 13);
-const baseMap = L.tileLayer(cartoUrl(), { subdomains: 'abcd', maxZoom: 20, attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · © CARTO' }).addTo(map);
-dark.addEventListener?.('change', () => baseMap.setUrl(cartoUrl()));
+// Capas base: satélite (por defecto, con nombres de calles y municipios encima), mapa de calles y relieve.
+// maxNativeZoom evita los cuadros grises al acercar más de lo que da cada servicio: se amplía la última tesela.
+const esri = s => `https://server.arcgisonline.com/ArcGIS/rest/services/${s}/MapServer/tile/{z}/{y}/{x}`;
+const satelite = L.layerGroup([
+  L.tileLayer(esri('World_Imagery'), { maxZoom: 20, maxNativeZoom: 19, attribution: 'Imágenes © Esri, Maxar, Earthstar Geographics' }),
+  L.tileLayer(esri('Reference/World_Transportation'), { maxZoom: 20, maxNativeZoom: 19, opacity: .6 }),
+  L.tileLayer(esri('Reference/World_Boundaries_and_Places'), { maxZoom: 20, maxNativeZoom: 19 }),
+]).addTo(map);
+const calles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20, maxNativeZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' });
+const relieve = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { subdomains: 'abc', maxZoom: 20, maxNativeZoom: 17, attribution: '© OpenStreetMap · SRTM · © <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)' });
 const layersCtl = {
-  'Mapa': baseMap,
-  'Satélite': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Imágenes © Esri, Maxar, Earthstar Geographics' }),
-  'Relieve': L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17, attribution: '© OpenStreetMap · SRTM · © OpenTopoMap (CC-BY-SA)' }),
+  'Satélite': satelite,
+  'Mapa (calles y municipios)': calles,
+  'Relieve': relieve,
 };
 L.control.layers(layersCtl, null, { position: 'topright' }).addTo(map);
 L.control.zoom({ position: 'topright' }).addTo(map);
@@ -313,12 +319,31 @@ if (state.to) setPoint('to', state.to);
 if (state.from && state.to) map.fitBounds([[state.from.lat, state.from.lon], [state.to.lat, state.to.lon]], { padding: [60, 60] });
 
 const sheet = $('#sheet');
-$('#handle').addEventListener('click', () => { sheet.classList.toggle('collapsed'); $('#handle').setAttribute('aria-expanded', !sheet.classList.contains('collapsed')); });
+const mobile = () => innerWidth < 900;
+function setSheet(open) {
+  sheet.classList.toggle('collapsed', !open);
+  $('#handle').setAttribute('aria-expanded', open);
+  if (!open) sheet.scrollTop = 0;
+}
+$('#handle').addEventListener('click', () => setSheet(sheet.classList.contains('collapsed')));
+// Deslizar el panel arriba/abajo con el dedo (desde el asa o la barra de resumen)
+{
+  let y0 = null, st0 = 0;
+  sheet.addEventListener('touchstart', e => { if (e.target.closest('#handle,.peek') || sheet.scrollTop <= 0) { y0 = e.touches[0].clientY; st0 = sheet.scrollTop; } else y0 = null; }, { passive: true });
+  sheet.addEventListener('touchend', e => {
+    if (y0 == null) return;
+    const dy = e.changedTouches[0].clientY - y0; y0 = null;
+    if (dy > 40 && st0 <= 0) setSheet(false);
+    else if (dy < -40 && sheet.classList.contains('collapsed')) setSheet(true);
+  }, { passive: true });
+}
+// Al mover el mapa en el móvil, el panel se baja
+map.on('dragstart', () => { if (mobile() && state.result) setSheet(false); });
 function fitPad() {
   const wide = innerWidth >= 900;
   const top = $('.search').getBoundingClientRect().bottom + 16;
   return wide ? { paddingTopLeft: [440, 40], paddingBottomRight: [40, 40] }
-    : { paddingTopLeft: [24, top], paddingBottomRight: [24, Math.min(innerHeight * 0.5, sheet.getBoundingClientRect().height) + 20] };
+    : { paddingTopLeft: [24, top], paddingBottomRight: [24, Math.max(0, innerHeight - sheet.getBoundingClientRect().top) + 20] };
 }
 let toastT;
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 3500); }
@@ -444,7 +469,7 @@ async function run() {
     const baseCount = collect(pois, base.coords, M, []).length;
     state.result = { base, route: best.route, picks: best.picks, items, baseCount, M, themeIds, wd: null };
     status('');
-    draw(); renderResult();
+    renderResult(); draw();
     if (!pois.length) toast('No he encontrado lugares de ese tipo cerca: te muestro la ruta normal.');
   } catch (e) {
     console.error(e); status('No he podido calcular la ruta: ' + e.message, true);
@@ -477,6 +502,11 @@ function renderResult() {
   const dd = r.route.distance - r.base.distance, pct = Math.round(dd / r.base.distance * 100);
   const more = r.items.length - r.baseCount;
   el.innerHTML = `
+    <div class="peek">
+      <button type="button" class="peekinfo" id="peekInfo" aria-label="Desplegar detalles"><b style="color:${routeColor()}">${fmtKm(r.route.distance)}</b> · ${fmtT(r.route.duration)}<span>${r.items.length} ${pl(r.items.length, 'lugar', 'lugares')} por el camino</span></button>
+      <button type="button" class="primary sm" id="peekCat"${r.items.length ? '' : ' disabled'}>Catálogo</button>
+      <button type="button" class="ib fold" id="peekFold" aria-label="Bajar o subir el panel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    </div>
     <div class="sum">
       <div class="col them" style="--c:${routeColor()}"><p class="lbl">Ruta temática</p><p class="big">${fmtKm(r.route.distance)}</p><p>${fmtT(r.route.duration)} · <b>${r.items.length}</b> ${pl(r.items.length, 'lugar', 'lugares')}</p></div>
       <div class="col norm"><p class="lbl">Ruta normal</p><p class="big">${fmtKm(r.base.distance)}</p><p>${fmtT(r.base.duration)} · ${r.baseCount} ${pl(r.baseCount, 'lugar', 'lugares')}</p></div>
@@ -489,11 +519,14 @@ function renderResult() {
     </div>
     <label class="tgl"><input type="checkbox" id="showBase"${store.get('showBase', true) ? ' checked' : ''}> Mostrar la ruta normal (punteada)</label>`;
   el.hidden = false;
-  sheet.classList.remove('collapsed');
+  sheet.classList.add('has-result');
+  setSheet(!mobile());
+  $('#peekCat').addEventListener('click', () => openCatalog());
+  $('#peekFold').addEventListener('click', () => setSheet(sheet.classList.contains('collapsed')));
+  $('#peekInfo').addEventListener('click', () => setSheet(sheet.classList.contains('collapsed')));
   $('#openCat').addEventListener('click', () => openCatalog());
   $('#gpx').addEventListener('click', downloadGpx);
   $('#showBase').addEventListener('change', e => { store.set('showBase', e.target.checked); e.target.checked ? routeLayer.addLayer(baseLineLayer) : routeLayer.removeLayer(baseLineLayer); });
-  sheet.scrollTop = 0;
 }
 function gmapsUrl() {
   const r = state.result, S = state.from, E = state.to;
@@ -650,7 +683,7 @@ $('#catPrint').addEventListener('click', async () => {
 $('#grid').addEventListener('click', e => {
   const b = e.target.closest('[data-fly]'); if (!b) return;
   const p = state.result.items.find(x => x.id === b.dataset.fly); if (!p) return;
-  closeCatalog(); sheet.classList.add('collapsed');
+  closeCatalog(); if (mobile()) setSheet(false);
   map.flyTo([p.lat, p.lon], Math.max(map.getZoom(), 16), { duration: .8 });
   setTimeout(() => p.marker?.openPopup(), 900);
 });
